@@ -1,0 +1,135 @@
+#include <math.h>
+#include <Arduino.h>
+// Z3 dataset
+#define N 17
+
+float RR[N] = {5182.99696764373,5142.65957561124,5239.43715524800,5146.70418383055,
+5144.41346292233,5164.00530154269,5111.65888626585,5051.38117180330,4915.77789108876,
+4863.42200135947,4867.42200186909,4640.42160876493, 4545.32817846491,4391.20265502517,
+4190.96352788886,4028.11113679093,3859.50287924449};
+
+float XX[N] = {44.5471706905990,57.3098202532141,75.5788660091257,95.8853802861967,
+123.417282553720,158.896287990916,200.653507426711,251.134236111163,306.506833264935,
+375.309280983697,456.701850114401,517.125439721772,583.736778011260,626.130371932565,
+635.114707394159,618.391811319109,571.563327523177};
+
+float ff[N] = {3000.00000000000, 4313.21568945294,  6201.27652791432,  8915.81440494542,  
+12818.6101918870,  18429.8101988761,  26497.2488344774,  38096.1164667355,  54772.2557505166,  
+78748.1842832857,  113219.301322200,  162779.755603937,  234034.731932072,  336480.759215441,  
+483771.363282358, 695536.744739168,  1000000};
+
+unsigned long duration_alg = 0;
+
+void setup()
+{
+  Serial.begin(9600);
+  while (!Serial)
+  {
+    ;
+  }
+  
+  Serial.println("*******START*******");
+  
+  duration_alg = micros();
+  float maxAbsXX = XX[0];
+  int idx = 0;
+  for (int i = 1; i < N; i++) 
+  {
+    if (abs(XX[i]) > maxAbsXX) 
+    {
+      maxAbsXX = abs(XX[i]);
+      idx = i;
+    }
+  }
+  float fc = ff[idx];
+
+  float minError = 1e9;
+  float Rinf_est = 0.0, R0_est = 0.0, alpha_est = 0.0;
+  for (float alpha = 0.01; alpha < 1.000; alpha += 0.01) 
+  {
+    float Rinf_sum = 0.0, R0_sum = 0.0;
+    float R_e[N]={0.0};
+    float X_e[N]={0.0};
+
+    for (int k = 0; k < N; k++) 
+    {
+      float Ri = RR[k];
+      float Xi = XX[k];
+      float fi = ff[k];
+
+      float pow_term = pow(fi / fc, alpha);
+      float pi_alpha_half = PI * alpha / 2.0;
+      float cos_val = cos(pi_alpha_half);
+      float sin_val = sin(pi_alpha_half);
+
+      float Rinf_e = Ri - (Xi * cos_val + Xi / pow_term) / sin_val;
+      float R0_e = Ri + (Xi * pow_term + Xi * cos_val) / sin_val;
+
+      Rinf_sum += Rinf_e;
+      R0_sum += R0_e;
+    }
+
+    float Rinf_e_mean = Rinf_sum / N;
+    float R0_e_mean = R0_sum / N;
+
+    for (int k = 0; k < N; k++) 
+    {
+      float pow_term = pow(ff[k] / fc, alpha);
+
+      // Cole model
+      float denom = (1+pow_term*cos(alpha*PI*0.5))*(1+pow_term*cos(alpha*PI*0.5))+(pow_term*sin(PI * alpha / 2))*(pow_term* sin(PI * alpha / 2));
+      float Re = Rinf_e_mean + (R0_e_mean - Rinf_e_mean)*(1+pow_term*cos(alpha*PI*0.5)) / denom;
+      float Xe = -(R0_e_mean - Rinf_e_mean) * pow_term * sin(PI * alpha / 2) / denom;
+
+      R_e[k] = Re;
+      X_e[k] = Xe;
+    }
+
+    float RE_R_avg = 0.0;
+    float RE_X_avg = 0.0;
+
+    for (int k = 0; k < N; k++) 
+    {
+      float RE_R = 100.0 * abs((RR[k] - R_e[k]) / RR[k]);
+      float RE_X = 100.0 * abs((XX[k] - X_e[k]) / XX[k]);
+      RE_R_avg += RE_R;
+      RE_X_avg += RE_X;
+    }
+
+    RE_R_avg /= N;
+    RE_X_avg /= N;
+
+    float RE_sum = RE_R_avg + RE_X_avg;
+
+    if (RE_sum < minError) 
+    {
+      minError = RE_sum;
+      Rinf_est = Rinf_e_mean;
+      R0_est = R0_e_mean;
+      alpha_est = alpha;
+    }
+
+  }
+
+  float C_est = 1.0 / ((R0_est - Rinf_est) * pow(2 * PI * fc, alpha_est));
+  duration_alg = micros() - duration_alg;
+
+  Serial.print("EST Cole Rinf= ");
+  Serial.print(Rinf_est, 2);
+  Serial.print("\t R0= ");
+  Serial.print(R0_est, 2);
+  Serial.print("\t C= ");
+  Serial.print(C_est * 1e9, 3);
+  Serial.print("\t alpha= ");
+  Serial.print(alpha_est, 3);
+  Serial.print("\t fc= ");
+  Serial.println(fc, 2);
+  Serial.print("Execution time: ");
+  Serial.print(duration_alg * 1e-6);
+  Serial.println(" seconds");
+  Serial.println("*******END*******");
+}
+
+void loop()
+{
+}
