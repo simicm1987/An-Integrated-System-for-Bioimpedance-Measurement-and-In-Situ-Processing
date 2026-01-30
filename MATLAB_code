@@ -1,0 +1,403 @@
+clear all
+clc
+
+%Z3
+fmin = 3e3;
+fmax = 1e6;
+N = 17;
+ff=logspace(log10(fmin), log10(fmax), N);
+Rinf = 3235.10;
+R0 = 5205.33;
+TTau=2.17e-6;
+fcc=1/TTau;
+alpha_set = 0.73;
+C=1/((R0 - Rinf)*(2*pi*fcc)^alpha_set);
+R1=R0-Rinf;
+
+ww= 2 * pi * ff;
+fprintf('SET  Cole Rinf= %.3f\t R0= %.3f\t C(nF)= %.3f\t fc(kHz)= %.3f\t alpha=%.3f\t \t\n', Rinf, R0, C*1e9, fcc*1e-3, alpha_set);
+
+Zm=Rinf+(R1)./(1+(R1)*C*(1i*ww).^alpha_set); %Cole
+
+rng(0,'twister');
+a = 0.25;
+b = -0.25;
+r = (b-a).*randn(N,1) + a;
+Z = Zm.*(1+0.01*r');
+
+RR = real(Z);
+XX = -imag(Z);
+
+tic ; %start measurement of execution time
+[~,idx] = max(abs(XX)); 
+fc = ff(idx);
+fprintf('BASIC\n');
+brojac=1;
+minError=inf;
+iteration_count = 0;
+for(alpha=0.001:0.001:1.0)
+iteration_count = iteration_count+1;    
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+ %fprintf('%.3f %.3f\n', alpha_e, RE_sum(brojac));
+
+    if(RE_sum(brojac)<minError)
+        minError=RE_sum(brojac);
+        Rinf_est=Rinf_e;
+        R0_est=R0_e;
+        alpha_est=alpha_e;
+        RE_R_est=RE_R_avg(brojac);
+        RE_X_est=RE_X_avg(brojac);
+        RE_sum_est=RE_sum(brojac);
+    end
+    
+    brojac=brojac+1;
+end
+toc
+C_est=1/((R0_est - Rinf_est)*(2*pi*fc)^alpha_est);
+Zest_cole=Rinf_est+(R0_est-Rinf_est)./(1+(1i*ff/fc).^alpha_est);
+Rest_cole=real(Zest_cole);
+Xest_cole=-imag(Zest_cole);
+fprintf('EST  Cole Rinf= %.2f\t R0= %.2f\t  C=%.3f\t alpha=%.3f\t fc= %.2f\t\n', Rinf_est, R0_est, C_est*1e9, alpha_est, fc);
+fprintf('Itear. %d EST  alpha=%.3f\t\n', iteration_count, alpha_est);
+
+fprintf('MULTI STEP\n');
+iteration_count = 0;
+tic ; %start measurement of execution time
+[~,idx] = max(abs(XX)); 
+fc = ff(idx);
+brojac=1;
+minError=inf;
+for(alpha=0.0:0.1:1.0)
+    iteration_count = iteration_count+1;    
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+ fprintf('%.3f %.3f\n', alpha_e, RE_sum(brojac));
+
+    if(RE_sum(brojac)<minError)
+        minError=RE_sum(brojac);
+        Rinf_est=Rinf_e;
+        R0_est=R0_e;
+        alpha_est=alpha_e;
+        RE_R_est=RE_R_avg(brojac);
+        RE_X_est=RE_X_avg(brojac);
+        RE_sum_est=RE_sum(brojac);
+    end
+    
+    brojac=brojac+1;
+end
+for(alpha=alpha_est-0.1:0.01:alpha_est+0.1)
+   iteration_count = iteration_count+1;    
+ 
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+fprintf('%.3f %.3f\n', alpha_e, RE_sum(brojac));
+
+    if(RE_sum(brojac)<minError)
+        minError=RE_sum(brojac);
+        Rinf_est=Rinf_e;
+        R0_est=R0_e;
+        alpha_est=alpha_e;
+        RE_R_est=RE_R_avg(brojac);
+        RE_X_est=RE_X_avg(brojac);
+        RE_sum_est=RE_sum(brojac);
+    end
+    
+    brojac=brojac+1;
+end
+
+for(alpha=alpha_est-0.01:0.001:alpha_est+0.01)
+    iteration_count = iteration_count+1;    
+
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+fprintf('%.3f %.3f\n', alpha_e, RE_sum(brojac));
+
+    if(RE_sum(brojac)<minError)
+        minError=RE_sum(brojac);
+        Rinf_est=Rinf_e;
+        R0_est=R0_e;
+        alpha_est=alpha_e;
+        RE_R_est=RE_R_avg(brojac);
+        RE_X_est=RE_X_avg(brojac);
+        RE_sum_est=RE_sum(brojac);
+    end
+    
+    brojac=brojac+1;
+end
+toc
+
+C_est=1/((R0_est - Rinf_est)*(2*pi*fc)^alpha_est);
+Zest_cole=Rinf_est+(R0_est-Rinf_est)./(1+(1i*ff/fc).^alpha_est);
+Rest_cole=real(Zest_cole);
+Xest_cole=-imag(Zest_cole);
+fprintf('Itear. %d EST  alpha=%.3f\t\n', iteration_count, alpha_est);
+
+tic ; %start measurement of execution time
+[~,idx] = max(abs(XX)); 
+fc = ff(idx);
+fprintf('BISECTION\n');
+iteration_count = 0;
+a = 0.0;
+b = 1.0;
+eps_alpha = 0.001;     % Desired accuracy of ?
+delta = 1e-4;          % Small shift to compute middle subpoints
+
+while (b - a) > eps_alpha
+    alpha1 = (a + b)/2 - delta;
+    alpha2 = (a + b)/2 + delta;
+    iteration_count = iteration_count+1;    
+    
+    alpha=alpha1;
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+%fprintf('%.3f %.3f\n', alpha, RE_sum(brojac));
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+f1=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+
+alpha=alpha2;
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+f2=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+    
+    if f1 < f2
+        b = alpha2;
+    else
+        a = alpha1;
+    end
+alpha_est = (a + b)/2;
+
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha_est)/2) + Xi/(fi/fc)^alpha_est)/sin((pi*alpha_est)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha_est + Xi*cos((pi*alpha_est)/2))/sin((pi*alpha_est)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); 
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_est);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+f_bisection=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+fprintf('%.3f %.3f\n', alpha_est, f_bisection);
+   
+    
+end
+toc
+C_est=1/((R0_est - Rinf_est)*(2*pi*fc)^alpha_est);
+Zest_cole=Rinf_est+(R0_est-Rinf_est)./(1+(1i*ff/fc).^alpha_est);
+Rest_cole=real(Zest_cole);
+Xest_cole=-imag(Zest_cole);
+fprintf('Itear. %d EST  alpha=%.3f\t\n', iteration_count, alpha_est);
+
+tic ; %start measurement of execution time
+[~,idx] = max(abs(XX)); 
+fc = ff(idx);
+fprintf('GOLDEN RATIO\n');
+iteration_count = 0;
+
+% Define initial bounds for ?
+a = 0.1;
+b = 1.0;
+tau = (sqrt(5) - 1) / 2;  % Golden ratio constant ? 0.618
+eps_alpha = 0.001;        % Stopping tolerance
+
+% Initial interior points
+alpha1 = b - tau * (b - a);
+alpha2 = a + tau * (b - a);
+
+alpha=alpha1;
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+f1=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+
+alpha=alpha2;
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+f2=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+
+% Iterative optimization loop
+while (b - a) > eps_alpha
+    iteration_count = iteration_count+1;    
+
+    if f1 < f2
+        b = alpha2;
+        alpha2 = alpha1;
+        f2 = f1;
+        alpha1 = b - tau * (b - a);
+        alpha=alpha1;
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+f1=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+%fprintf('%.3f %.3f\n', alpha, RE_sum(brojac));
+    else
+        a = alpha1;
+        alpha1 = alpha2;
+        f1 = f2;
+        alpha2 = a + tau * (b - a);
+        alpha=alpha2;
+for k=1:1:N
+Ri=RR(k);
+Xi=XX(k);
+fi=ff(k);
+Rinf_e_array(k) = Ri - (Xi*cos((pi*alpha)/2) + Xi/(fi/fc)^alpha)/sin((pi*alpha)/2);
+R0_e_array(k) = Ri + (Xi*(fi/fc)^alpha + Xi*cos((pi*alpha)/2))/sin((pi*alpha)/2);
+end
+Rinf_e=mean(Rinf_e_array); R0_e=mean(R0_e_array); alpha_e=alpha;
+Z_e=Rinf_e+(R0_e-Rinf_e)./(1+(1i*ff/fc).^alpha_e);
+R_e=real(Z_e);
+X_e=-imag(Z_e);
+R_MSE = 100*abs((RR - R_e)./RR);
+X_MSE = 100*abs((XX - X_e)./XX);
+
+RE_R_avg(brojac)=mean(R_MSE);
+RE_X_avg(brojac)=mean(X_MSE);
+
+RE_sum(brojac)=RE_R_avg(brojac)+RE_X_avg(brojac);
+%fprintf('%.3f %.3f\n', alpha, RE_sum(brojac));
+f2=mean(100*abs((RR - R_e)./RR))+mean(100*abs((XX - X_e)./XX));
+    end
+end
+% Estimated alpha is midpoint
+alpha_est = (a + b) / 2;
+toc
+
+C_est=1/((R0_est - Rinf_est)*(2*pi*fc)^alpha_est);
+Zest_cole=Rinf_est+(R0_est-Rinf_est)./(1+(1i*ff/fc).^alpha_est);
+Rest_cole=real(Zest_cole);
+Xest_cole=-imag(Zest_cole);
+fprintf('Itear. %d EST  alpha=%.3f\t\n', iteration_count, alpha_est);
